@@ -13,6 +13,8 @@ import array
 
 from . import data
 
+
+
 def dprint(x):
     s=''
     for i in dir(x):
@@ -24,10 +26,53 @@ def dprint(x):
             s+='{}:{} \n'.format(i, 'error')
     print(s)
 
+
 class Game:
+    def __init__(self):
+        self.text_textures = {}
+
+    def drawText(self, position, textString, size=32):
+        if (textString, size) in self.text_textures:
+            tex, w, h = self.text_textures[(textString, size)]
+        else:
+            font=pygame.font.Font(None, size)
+            textSurface=font.render(textString,True,(255,255,255,255),(0,0,0,255))
+            textData=pygame.image.tostring(textSurface,"RGBA",True)
+            w, h = textSurface.get_width(), textSurface.get_height()
+            tex = self.ctx.texture((w, h), 4, textData)
+            self.text_textures[(textString, size)] = (tex, w, h)
+        tex.use()
+        vertex_buffer = self.ctx.buffer(array.array('f',
+           [0,0, 0,0, 1,0,0,
+            1,0, 1,0, 1,0,0,
+            0,1, 0,1, 1,0,0,
+
+            0,1, 0,1, 1,0,0,
+            1,0, 1,0, 1,0,0,
+            1,1, 1,1, 1,0,0,
+           ]).tobytes())
+
+        vertex_array = self.ctx.simple_vertex_array(
+            self.ui_shader, vertex_buffer,
+            'in_vert', 'in_tex', 'in_color')
+
+        x, y = position
+        x = (x - 400.0) / 400.0
+        y = (y - 300.0) / 300.0
+
+        print("{}".format((x,y,w,h)))
+        self.ui_shader['sampler'].value = 0
+        self.ui_shader['u_pos'].value = (x, y)
+        self.ui_shader['u_size'].value = (w / 400.0, h / 300.0)
+
+        vertex_array.render(moderngl.TRIANGLES)
+
     def draw(self):
         self.ctx.clear()
-        self.vertex_array.render(moderngl.TRIANGLES)
+        self.drawText((0, 0), "(0,0)")
+        self.drawText((700, 0), "(700,0)")
+        self.drawText((700, 500), "(700,500)")
+        self.drawText((500, 500), "(500,500)")
         pygame.display.flip()
 
     def start(self):
@@ -41,11 +86,14 @@ class Game:
         self.ui_shader = self.ctx.program(vertex_shader=data.load_text('ui.vert'),
                                           fragment_shader=data.load_text('ui.frag'))
         self.vertex_buffer = self.ctx.buffer(array.array('f',
-        [0,0,0, 1,0,0,
-         1,0,0, 1,0,0,
-         0,1,0, 1,0,0,]).tobytes())
-        
-        self.vertex_array = self.ctx.simple_vertex_array(self.ui_shader, self.vertex_buffer, 'in_vert', 'in_color')
+        [0,0,0, 0,0, 1,0,0,
+         1,0,0, 1,0, 1,0,0,
+         0,1,0, 0,1, 1,0,0,]).tobytes())
+
+        #self.vertex_array = self.ctx.simple_vertex_array(
+        #    self.ui_shader, self.vertex_buffer,
+        #    'in_vert', 'in_tex', 'in_color')
+
         while True:
             clock.tick(59)
             for e in pygame.event.get():
@@ -56,6 +104,7 @@ class Game:
                 else:
                     print(e)
             self.draw()
+
 
 def main():
     g = Game()

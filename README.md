@@ -25,6 +25,9 @@ Othewise open a terminal / console and "cd" to the game directory and run:
 
   python run_game.py
 
+If you have Intel graphics card on Linux try:
+
+  MESA_GL_VERSION_OVERRIDE=3.3 python run_game.py
 
 HOW TO PLAY THE GAME
 --------------------
