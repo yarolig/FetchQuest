@@ -22,3 +22,6 @@ def load(filename, mode='rb'):
     '''
     return open(os.path.join(data_dir, filename), mode)
 
+def load_text(filename):
+    return open(os.path.join(data_dir, filename), 'rb').read().decode("utf-8")
+
