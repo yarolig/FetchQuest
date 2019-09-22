@@ -60,7 +60,6 @@ class Game:
         x = (x - 400.0) / 400.0
         y = (y - 300.0) / 300.0
 
-        print("{}".format((x,y,w,h)))
         self.ui_shader['sampler'].value = 0
         self.ui_shader['u_pos'].value = (x, y)
         self.ui_shader['u_size'].value = (w / 400.0, h / 300.0)
@@ -69,10 +68,8 @@ class Game:
 
     def draw(self):
         self.ctx.clear()
-        self.drawText((0, 0), "(0,0)")
-        self.drawText((700, 0), "(700,0)")
-        self.drawText((700, 500), "(700,500)")
-        self.drawText((500, 500), "(500,500)")
+        self.drawText((100, 400), "Please do not use ModernGL", 60)
+        self.drawText((100, 100), "There is no documentation that is allowed to use.", 40)
         pygame.display.flip()
 
     def start(self):
