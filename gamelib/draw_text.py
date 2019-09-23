@@ -16,6 +16,31 @@ from OpenGL.GL import shaders
 #from OpenGL.arrays import vbo
 
 
+
+class Texture:
+    def __init__(self):
+        self.textures = {}
+
+    def set(self, name):
+        if name in self.textures:
+            tex = self.textures[name]
+        else:
+            surface = pygame.image.load(name)
+            data = pygame.image.tostring(surface, "RGBA", True)
+            w, h = surface.get_width(), surface.get_height()
+
+            tex = glGenTextures(1)
+            glBindTexture(GL_TEXTURE_2D, tex)
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR)
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA,
+                         GL_UNSIGNED_BYTE, data)
+            self.textures[name] = tex
+            glGenerateMipmap(GL_TEXTURE_2D)
+        glBindTexture(GL_TEXTURE_2D, tex)
+
+
+
 class TextDrawer:
     def __init__(self):
         self.text_textures = {}
@@ -27,13 +52,13 @@ class TextDrawer:
                                   GL_FRAGMENT_SHADER),
         )
         self.vertex_array_vbo = OpenGL.arrays.vbo.VBO(numpy.array(
-            [0, 0, 0, 0, 1, 0, 0,
-             1, 0, 1, 0, 1, 0, 0,
-             0, 1, 0, 1, 1, 0, 0,
+            [0, 0, 0, 0, 0, 0.1, 0,
+             1, 0, 1, 0, 0, 0.2, 0,
+             0, 1, 0, 1, 0, 0.2, 0,
 
-             0, 1, 0, 1, 1, 0, 0,
-             1, 0, 1, 0, 1, 0, 0,
-             1, 1, 1, 1, 1, 0, 0,
+             0, 1, 0, 1, 0, 0.2, 0,
+             1, 0, 1, 0, 0, 0.2, 0,
+             1, 1, 1, 1, 0, 0.3, 0,
              ], dtype='f'))
 
     def draw(self, pos, text, size):
