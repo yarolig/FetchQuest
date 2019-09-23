@@ -1,4 +1,4 @@
-#version 330
+#version 130
 
 in vec3 v_color;
 in vec2 v_tex;

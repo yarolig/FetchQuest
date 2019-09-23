@@ -1,4 +1,4 @@
-#version 330
+#version 130
 
 in vec2 in_vert;
 in vec2 in_tex;

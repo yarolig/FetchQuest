@@ -6,6 +6,8 @@ Feel free to put all your game code here, or in other modules in this "gamelib"
 package.
 '''
 import pygame
+import pygame.time
+import pygame.display
 import os
 
 import moderngl
@@ -20,7 +22,8 @@ from OpenGL.GL import *
 from OpenGL.GLU import *
 from OpenGL.GL import shaders
 #from OpenGL.arrays import vbo
-
+from .draw_text import *
+import time
 
 def dprint(x):
     s=''
@@ -34,107 +37,88 @@ def dprint(x):
     print(s)
 
 
+class KeyNames:
+    def __init__(self):
+        self.names = {
+            1 : 'M_LEFT',
+            2 : 'M_CENTER',
+            3 : 'M_RIGHT',
+        }
+        for k in dir(pygame):
+            if k.startswith('K_'):
+                n = getattr(pygame, k)
+                self.names[n] = k
+    def get(self, n):
+        return self.names.get(n) or "{}".format(n)
+
+
 class Game:
     def __init__(self):
-        self.text_textures = {}
+        self.key_names = KeyNames()
+        pass
 
-    def drawText(self, position, textString, size=32):
-        if (textString, size) in self.text_textures:
-            tex, w, h = self.text_textures[(textString, size)]
-        else:
-            font=pygame.font.Font(None, size)
-            textSurface=font.render(textString,True,(255,255,255,255),(0,0,0,255))
-            textData=pygame.image.tostring(textSurface,"RGBA",True)
-            w, h = textSurface.get_width(), textSurface.get_height()
+    def on_key(self, key, is_down):
+        print("key {} is {}".format(self.key_names.get(key), 'down' if is_down else 'up'))
 
-            tex = glGenTextures(1)
-            glBindTexture(GL_TEXTURE_2D, tex)
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA,
-                         GL_UNSIGNED_BYTE, textData)
+    def on_move(self, pos):
+        pass
 
-            self.text_textures[(textString, size)] = (tex, w, h)
 
-        glBindTexture(GL_TEXTURE_2D, tex)
+class Shell:
+    def __init__(self):
+        self.text = TextDrawer()
+        pygame.init()
+        pygame.display.init()
+        pygame.display.set_mode([800, 600],
+                                pygame.OPENGL | pygame.DOUBLEBUF)
+        self.clock = pygame.time.Clock()
+        self.text.init()
+        self.game = Game()
+        # workaround for
+        pygame.mixer.quit()
 
-        vertex_array_vbo = OpenGL.arrays.vbo.VBO(numpy.array(
-           [0,0, 0,0, 1,0,0,
-            1,0, 1,0, 1,0,0,
-            0,1, 0,1, 1,0,0,
-
-            0,1, 0,1, 1,0,0,
-            1,0, 1,0, 1,0,0,
-            1,1, 1,1, 1,0,0,
-           ], dtype='f'))
-
-        x, y = position
-        x = (x - 400.0) / 400.0
-        y = (y - 300.0) / 300.0
-
-        def gul(s):
-            n = glGetUniformLocation(self.ui_shader, s)
-            #print("gul({})={}".format(s,n))
-            return n
-
-        def gal(s):
-            n = glGetAttribLocation(self.ui_shader, s)
-            #print("gal({})={}".format(s,n))
-            return n
-        glUseProgram(self.ui_shader)
-        vertex_array_vbo.bind()
-
-        glUniform2f(glGetUniformLocation(self.ui_shader, 'u_pos'), x, y)
-        glUniform2f(glGetUniformLocation(self.ui_shader, 'u_size'),
-                    w / 400.0, h / 300.0)
-
-        glUniform1i(gul('sampler'), 0)
-        glEnableVertexAttribArray(gal('in_vert'))
-        glEnableVertexAttribArray(gal('in_tex'))
-        glEnableVertexAttribArray(gal('in_color'))
-
-        glVertexAttribPointer(gal('in_vert'), 2, GL_FLOAT, False, 7*4, vertex_array_vbo)
-        glVertexAttribPointer(gal('in_tex'),  2, GL_FLOAT, False, 7*4, vertex_array_vbo+2*4)
-        glVertexAttribPointer(gal('in_color'), 3, GL_FLOAT, False, 7*4, vertex_array_vbo+4*4)
-        glDrawArrays(GL_TRIANGLES, 0, 6)
-        vertex_array_vbo.unbind()
-        glUseProgram(0)
-
-        #vertex_array.render(moderngl.TRIANGLES)
+    def resize(self, w, h):
+        glViewport(0, 0, w, h)
 
     def draw(self):
         glClearColor(0.3, 0.4, 0.5, 1.0)
         glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT)
+        fps = self.clock.get_fps()
+        s = "FPS: {:.1f}".format(fps)
+        self.text.draw((700, 570), s, 30)
 
-        self.drawText((100, 400), "Please do not use ModernGL", 60)
-        self.drawText((100, 100), "There is no documentation that is allowed to use.", 40)
+        glFinish()
+        glFlush()
         pygame.display.flip()
 
     def start(self):
-        pygame.init()
-        pygame.display.init()
-        pygame.display.set_mode([800,600], pygame.OPENGL | pygame.DOUBLEBUF | pygame.HWSURFACE | pygame.RESIZABLE)
-        clock = pygame.time.Clock()
-
-        print(data.load('ui.vert').read())
-        self.ui_shader = shaders.compileProgram(
-            shaders.compileShader(data.load_text('ui.vert'), GL_VERTEX_SHADER),
-            shaders.compileShader(data.load_text('ui.frag'), GL_FRAGMENT_SHADER),
-        )
 
         while True:
-            clock.tick(59)
+            dt=self.clock.tick(45)
+
             for e in pygame.event.get():
                 if e.type == pygame.QUIT:
                     return
                 elif e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE:
                     return
+                elif e.type == pygame.KEYDOWN:
+                    self.game.on_key(e.key, is_down=True)
+                elif e.type == pygame.KEYUP:
+                    self.game.on_key(e.key, is_down=False)
+                elif e.type == pygame.MOUSEMOTION:
+                    self.game.on_move(e.rel)
+                elif e.type == pygame.MOUSEBUTTONDOWN:
+                    self.game.on_key(e.button, is_down=True)
+                elif e.type == pygame.MOUSEBUTTONUP:
+                    self.game.on_key(e.button, is_down=False)
+
+                #elif e.type == pygame.VIDEORESIZE:
+                #    self.resize(e.w, e.h)
                 else:
                     print(e)
             self.draw()
 
-
 def main():
-    g = Game()
+    g = Shell()
     g.start()
     print("Thank you for playing.")
