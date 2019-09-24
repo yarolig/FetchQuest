@@ -15,6 +15,7 @@ import moderngl
 import array
 import numpy
 
+from gamelib.terrain import Terrain
 from . import data
 import OpenGL
 import OpenGL.arrays
@@ -24,6 +25,13 @@ from OpenGL.GLU import *
 from OpenGL.GL import shaders
 #from OpenGL.arrays import vbo
 from .draw_text import *
+from .cube import *
+from .vbo import *
+from .myshader import *
+from . import guns
+from . import terrain
+
+
 import time
 import glm
 DPF = 0
@@ -77,25 +85,6 @@ class Monster:
 
 
 
-
-
-
-
-
-class ShaderCache:
-    shaders = {}
-    @classmethod
-    def get(cls, name):
-        if name in cls.shaders:
-            return cls.shaders[name]
-        s = shaders.compileProgram(
-            shaders.compileShader(data.load_text(name + '.vert'), GL_VERTEX_SHADER),
-            shaders.compileShader(data.load_text(name + '.frag'), GL_FRAGMENT_SHADER),
-        )
-        cls.shaders[name] = s
-        return s
-
-
 class Model:
     models = {}
     name = ''
@@ -140,7 +129,7 @@ class Box:
             glGetUniformLocation(game.planet_shader, 'u_view'),
             1, False,
             mat2list(mscl))
-        glDrawArrays(GL_TRIANGLES, 0, game.cube_vbo_count)
+        glDrawArrays(GL_TRIANGLES, 0, game.vbo_cube.count)
         global DPF
         DPF += 1
 
@@ -199,9 +188,9 @@ class Tower:
                 self.boxes.append(box)
 
     def draw(self, game):
-        with game.cube_vbo:
+        with game.vbo_cube.vbo:
             glVertexAttribPointer(0, 3, GL_FLOAT, False, 8 * 4,
-                                  game.cube_vbo)
+                                  game.vbo_cube.vbo)
             for i in self.boxes:
                 i.draw(game, self)
 
@@ -224,105 +213,9 @@ class Game:
         t = Tower()
         t.pos = glm.vec3(300, 80, 100)
         self.towers.append(t)
-        arr = []
-        parr = [arr]
-
-        self.terrain_surface = pygame.image.load(data.filepath('terrain.png'))
-        def addvert(i, j):
-            vscale = 30.0
-            nscale = 0.06
-            noffset = 2019.0
-            nhscale = 0.130
-            tscale = 10.9
-
-            ii = (i) % self.terrain_surface.get_height()
-            jj = (j) % self.terrain_surface.get_width()
-            z = self.terrain_surface.get_at((jj, ii))[0]
-
-            z += glm.simplex(glm.vec3(noffset + nscale * i, noffset + nscale * j, 09.23))*nhscale
-            print("n={}".format(z))
-
-            parr[0] += [vscale * i,
-                        vscale * j,
-                        z,
-                        tscale*i, tscale*j,
-                        1, 1, 1]
-
-        for a in range(-10,69):
-            for b in range(-10,69):
-                addvert(a,b)
-                addvert(a+1,b)
-                addvert(a,b+1)
-
-                addvert(a,b+1)
-                addvert(a+1,b)
-                addvert(a+1,b+1)
-
-
-        #print(arr)
-        self.planet_vbo = OpenGL.arrays.vbo.VBO(numpy.array(arr, dtype='f'))
-        self.planet_vbo_count = len(arr) // 8
-
-        #------------------------------------------------
-        # cube
-        arr = []
-        # y = 1
-        arr += [0, 1, 0, 0, 0, 1, 1, 1]
-        arr += [1, 1, 0, 1, 0, 1, 1, 1]
-        arr += [0, 1, 1, 0, 1, 1, 1, 1]
-
-        arr += [0, 1, 1, 0, 1, 1, 1, 1]
-        arr += [1, 1, 0, 1, 0, 1, 1, 1]
-        arr += [1, 1, 1, 1, 1, 1, 1, 1]
-
-        # y = 0
-        arr += [0, 0, 0, 0, 0, 1, 1, 1]
-        arr += [0, 0, 1, 0, 1, 1, 1, 1]
-        arr += [1, 0, 0, 1, 0, 1, 1, 1]
-
-        arr += [0, 0, 1, 0, 1, 1, 1, 1]
-        arr += [1, 0, 1, 1, 0, 1, 1, 1]
-        arr += [1, 0, 0, 1, 1, 1, 1, 1]
-
-        # x = 1
-        arr += [1, 0, 0, 0, 0, 1, 1, 1]
-        arr += [1, 1, 0, 1, 0, 1, 1, 1]
-        arr += [1, 0, 1, 0, 1, 1, 1, 1]
-
-        arr += [1, 0, 1, 0, 1, 1, 1, 1]
-        arr += [1, 1, 0, 1, 0, 1, 1, 1]
-        arr += [1, 1, 1, 1, 1, 1, 1, 1]
-
-        # x = 0
-        arr += [0, 0, 0, 0, 0, 1, 1, 1]
-        arr += [0, 0, 1, 0, 1, 1, 1, 1]
-        arr += [0, 1, 0, 1, 0, 1, 1, 1]
-
-        arr += [0, 1, 0, 1, 0, 1, 1, 1]
-        arr += [0, 0, 1, 0, 1, 1, 1, 1]
-        arr += [0, 1, 1, 1, 1, 1, 1, 1]
-        
-        # z = 1
-        arr += [0, 0, 1, 0, 0, 1, 1, 1]
-        arr += [1, 0, 1, 1, 0, 1, 1, 1]
-        arr += [0, 1, 1, 0, 1, 1, 1, 1]
-
-        arr += [0, 1, 1, 0, 1, 1, 1, 1]
-        arr += [1, 0, 1, 1, 0, 1, 1, 1]
-        arr += [1, 1, 1, 1, 1, 1, 1, 1]
-
-        # z = 0
-        arr += [0, 0, 0, 0, 0, 1, 1, 1]
-        arr += [0, 1, 0, 0, 1, 1, 1, 1]
-        arr += [1, 0, 0, 1, 0, 1, 1, 1]
-
-        arr += [1, 0, 0, 1, 0, 1, 1, 1]
-        arr += [0, 1, 0, 0, 1, 1, 1, 1]
-        arr += [1, 1, 0, 1, 1, 1, 1, 1]
-        
-        self.cube_vbo = OpenGL.arrays.vbo.VBO(numpy.array(arr, dtype='f'))
-        self.cube_vbo_count = len(arr) // 8
-        pass
+        self.terrain = terrain.Terrain('terrain.png')
+        self.vbo_planet = Vbo.get('planet', self.terrain.make_data())
+        self.vbo_cube = Vbo.get('cube', make_cube())
 
 
     def on_key(self, key, is_down):
@@ -339,23 +232,54 @@ class Game:
         mvel = 0.1
         if m.inputs.get(pygame.K_w):
             m.pos += m.dir * mvel
+
         if m.inputs.get(pygame.K_s):
             m.pos -= m.dir * mvel
+
         if m.inputs.get(pygame.K_a):
             side = glm.normalize(glm.cross(m.dir, glm.vec3(0,0,1)))
             m.pos -= side * mvel
+
         if m.inputs.get(pygame.K_d):
             side = glm.normalize(glm.cross(m.dir, glm.vec3(0, 0, 1)))
             m.pos += side * mvel
+
         if m.inputs.get(pygame.K_SPACE):
             m.pos.z += mvel
+
         if m.inputs.get(pygame.K_c):
             m.pos.z -= mvel
+
+        zr = 0.5
+
+        terrainz = max([self.terrain.getz(m.pos.x, m.pos.y),
+                        self.terrain.getz(m.pos.x+zr, m.pos.y),
+                        self.terrain.getz(m.pos.x-zr, m.pos.y),
+                        self.terrain.getz(m.pos.x, m.pos.y+zr),
+                        self.terrain.getz(m.pos.x, m.pos.y-zr)])
+        #m.pos.z = terrainz + 1.7
+        print('{:.2f} {:.2f}'.format(terrainz, self.terrain.getz(m.pos.x, m.pos.y)))
+
+        if m.pos.z > terrainz + 1.7:
+            # in air
+            m.vel.z -= 0.01
+        elif m.pos.z > terrainz - 1.7:
+            # hit ground
+            desiredz = terrainz + 1.7
+            delta = desiredz - m.pos.z
+            m.pos.z = m.pos.z * 0.7 + desiredz * 0.3
+            if m.vel.z < 0:
+                m.vel.z = 0
+        else:
+            pass
+
+        m.pos += m.vel
+        m.vel *= 0.99
 
 
     prev_pos = None
     def on_move(self, position):
-        print(position)
+        #print(position)
         if self.prev_pos is None:
             self.prev_pos = glm.vec2(position)
         pos = glm.vec2(position)
@@ -375,7 +299,7 @@ class Game:
     def draw(self):
         self.process_monster(self.player)
         self.fov = self.fov * 0.92 + self.tgt_fov * 0.08
-        self.shell.texture.set(data.filepath('planet.png'))
+        Texture.set(data.filepath('planet.png'))
         glUseProgram(self.planet_shader)
 
         def gul(s):
@@ -404,13 +328,13 @@ class Game:
         glUniform1i(gul('sampler'), 0)
 
         glEnableVertexAttribArray(gal('in_vert'))
-        with self.planet_vbo:
-            glVertexAttribPointer(gal('in_vert'), 3, GL_FLOAT, False, 8*4, self.planet_vbo)
-            glDrawArrays(GL_TRIANGLES, 0, self.planet_vbo_count)
+        with self.vbo_planet.vbo:
+            glVertexAttribPointer(gal('in_vert'), 3, GL_FLOAT, False, 8*4, self.vbo_planet.vbo)
+            glDrawArrays(GL_TRIANGLES, 0, self.vbo_planet.count)
             global DPF
             DPF += 1
 
-        self.shell.texture.set(data.filepath('water.png'))
+        Texture.set(data.filepath('water.png'))
         glUniformMatrix4fv(
             glGetUniformLocation(self.planet_shader, 'u_view'),
             1, False,
@@ -423,15 +347,17 @@ class Game:
                             glm.vec3(0, 0, 1)),
                         glm.vec3(0, 0, 100.0)),
                     glm.vec3(1, 1, 0))))
-        with self.planet_vbo:
-            glVertexAttribPointer(gal('in_vert'), 3, GL_FLOAT, False, 8*4, self.planet_vbo)
-            glDrawArrays(GL_TRIANGLES, 0, self.planet_vbo_count)
+        with self.vbo_planet.vbo:
+            glVertexAttribPointer(gal('in_vert'), 3, GL_FLOAT, False, 8*4, self.vbo_planet.vbo)
+            glDrawArrays(GL_TRIANGLES, 0, self.vbo_planet.count)
             global DPF
             DPF += 1
 
-        for t in self.towers:
-            t.draw(self)
+        #for t in self.towers:
+        #    t.draw(self)
         glUseProgram(0)
+
+
 
 
 class Shell:
@@ -443,7 +369,7 @@ class Shell:
         self.overdraw = 1
         pygame.init()
         pygame.display.init()
-        pygame.display.set_mode([1280, 1024],
+        pygame.display.set_mode([1024, 768],
                                 pygame.OPENGL | pygame.DOUBLEBUF | pygame.RESIZABLE)
         self.clock = pygame.time.Clock()
         self.text.init()
@@ -468,7 +394,13 @@ class Shell:
         glEnable(GL_DEPTH_TEST)
         fps = self.clock.get_fps()
         global DPF
-        s = "FPS: {:.1f} * {} {}".format(fps, self.overdraw, DPF)
+        s = "FPS: {:.1f} * {} {} z:{:.2f} p{:.2f},{:.2f}".format(
+            fps,
+            self.overdraw,
+            DPF,
+            self.game.terrain.getz(self.game.player.pos.x, self.game.player.pos.y),
+            self.game.player.pos.x, self.game.player.pos.y
+        )
         DPF = 0
 
         self.text.draw((10, 570), s, 30)
