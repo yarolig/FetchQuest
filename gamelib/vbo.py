@@ -28,12 +28,13 @@ class Vbo:
         self.count = 0
 
     @classmethod
-    def get(cls, name, data=None):
+    def get(cls, name='', data=None):
         if name in cls.vbos:
             return cls.vbos[name]
         assert data
         v = Vbo()
         v.vbo = OpenGL.arrays.vbo.VBO(numpy.array(data, dtype='f'))
         v.count = len(data) // 8
-        cls.vbos[name] = v
+        if name:
+            cls.vbos[name] = v
         return v

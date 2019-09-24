@@ -30,7 +30,7 @@ from .vbo import *
 from .myshader import *
 from . import guns
 from . import terrain
-
+import random
 
 import time
 import glm
@@ -76,14 +76,94 @@ class Monster:
     yaw = 0
     pitch = 0
     hp = 100
+    gun = None
     def __init__(self):
         self.inputs = {}
+        self.guns = []
     def calc_dir(self):
         self.dir = glm.vec3(glm.cos(self.yaw) * glm.cos(self.pitch),
                  glm.sin(self.yaw) * glm.cos(self.pitch),
                  glm.sin(self.pitch))
 
 
+class Ray:
+    start = glm.vec3()
+    end = glm.vec3()
+    vel = glm.vec3()
+    color = glm.vec3()
+    ttl = 0 # frames
+    size = 0.05
+
+class Rays:
+    def __init__(self):
+        self.rays = []
+
+    def process(self):
+        for r in self.rays:
+            r.start += r.vel
+            r.end += r.vel
+
+        for r in self.rays[:]:
+            if r.ttl - 1 == 0:
+                self.rays.remove(r)
+            else:
+                r.ttl -= 1
+
+    def draw(self, game):
+        Texture.set(data.filepath('fruit.png'))
+        if not self.rays:
+            return
+        arr = []
+        parr = [arr]
+
+        def add_with_offset(r, off, c):
+            s = r + off
+            parr[0] += [s.x, s.y, s.z,
+                        0, 0,
+                        c.x, c.y, c.z]
+        for r in self.rays:
+            add_with_offset(r.start, glm.vec3(0,0,-r.size), r.color)
+            add_with_offset(r.end, glm.vec3(0,0,-r.size), r.color)
+            add_with_offset(r.end, glm.vec3(0,0,r.size), r.color)
+
+            add_with_offset(r.start, glm.vec3(0, 0, -r.size), r.color)
+            add_with_offset(r.start, glm.vec3(0, 0, r.size), r.color)
+            add_with_offset(r.end, glm.vec3(0, 0, r.size), r.color)
+
+            add_with_offset(r.start, glm.vec3(0, -r.size, 0), r.color)
+            add_with_offset(r.end, glm.vec3(0, -r.size, 0), r.color)
+            add_with_offset(r.end, glm.vec3(0, r.size, 0), r.color)
+
+            add_with_offset(r.start, glm.vec3(0, -r.size, 0), r.color)
+            add_with_offset(r.start, glm.vec3(0, r.size, 0), r.color)
+            add_with_offset(r.end, glm.vec3(0, r.size, 0), r.color)
+
+        vb = Vbo.get(data=arr)
+
+        glUniformMatrix4fv(
+            glGetUniformLocation(game.planet_shader, 'u_proj'),
+            1, False,
+            mat2list(glm.perspective(glm.radians(game.fov),
+                                     game.aspect,
+                                     0.1,
+                                     1000.0)))
+
+        glUniformMatrix4fv(
+            glGetUniformLocation(game.planet_shader, 'u_view'),
+            1, False,
+            mat2list(glm.lookAt(
+                game.player.pos,
+                game.player.pos + game.player.dir,
+                glm.vec3(0, 0, 1))))
+
+        glUniform1i(gul(game.planet_shader, 'sampler'), 0)
+        glEnableVertexAttribArray(gal(game.planet_shader, 'in_vert'))
+        with vb.vbo:
+            glVertexAttribPointer(gal(game.planet_shader, 'in_vert'), 3, GL_FLOAT, False, 8*4, vb.vbo)
+            glDrawArrays(GL_TRIANGLES, 0, vb.count)
+            global DPF
+            DPF += 1
+        vb.vbo.delete()
 
 class Model:
     models = {}
@@ -201,10 +281,19 @@ class Game:
         self.shell = shell
         self.aim = False
         self.player = Monster()
+        self.player.guns.append(guns.Pistol())
+        self.player.guns.append(guns.Shotgun())
+        self.player.guns.append(guns.SMG())
+        self.player.guns.append(guns.Rifle())
+        self.player.guns.append(guns.SniperRifle())
+        self.player.guns.append(guns.MachineGun())
+        self.player.gun = self.player.guns[0]
+
+
         self.fov = 90
         self.tgt_fov = 90
         self.aspect = 4.0/3.0
-        self.player.pos = glm.vec3(300,80,108)
+        self.player.pos = glm.vec3(300,80,130)
         self.planet_shader = shaders.compileProgram(
             shaders.compileShader(data.load_text('planet.vert'), GL_VERTEX_SHADER),
             shaders.compileShader(data.load_text('planet.frag'), GL_FRAGMENT_SHADER),
@@ -216,6 +305,16 @@ class Game:
         self.terrain = terrain.Terrain('terrain.png')
         self.vbo_planet = Vbo.get('planet', self.terrain.make_data())
         self.vbo_cube = Vbo.get('cube', make_cube())
+        self.rays = Rays()
+        r = Ray()
+        r.start = glm.vec3(0, 0, 0)
+        r.end = glm.vec3(100, 100, 100)
+        self.rays.rays.append(r)
+
+        r = Ray()
+        r.start = glm.vec3(300, 80, 108)
+        r.end = glm.vec3(400, 80, 108)
+        self.rays.rays.append(r)
 
 
     def on_key(self, key, is_down):
@@ -224,9 +323,105 @@ class Game:
         if key == 3:
             self.aim = is_down
             if self.aim:
-                self.tgt_fov = 30
+                self.tgt_fov = 5
             else:
                 self.tgt_fov = 90
+
+
+    def fire_weapon(self, m, g):
+        if g.charges < 1.0:
+            return  False
+
+        if g.temperature >= g.fail_temperature:
+            return False
+
+        # create rays
+        for i in range(g.rays_per_shot):
+            r = Ray()
+            up = glm.vec3(0, 0, 1)
+            side = glm.normalize(glm.cross(m.dir, glm.vec3(0, 0, 1)))
+
+            identity = glm.identity(glm.mat4)
+
+            xspread = random.randint(-100, 100) + random.randint(-100, 100)
+            yspread = random.randint(-100, 100) + random.randint(-100, 100)
+
+            xspread = (0.01 * xspread) * g.spreadx + g.offsetx
+            yspread = (0.01 * yspread) * g.spready + g.offsety
+
+            spreaded_dir = (
+                glm.rotate(identity, glm.radians(xspread), up) * glm.vec4(
+                m.dir, 0.0)).xyz
+            spreaded_dir = (
+                glm.rotate(identity, glm.radians(yspread), side) * glm.vec4(
+                spreaded_dir, 0.0)).xyz
+
+            gun_offset = 0.1
+            r.start = m.pos + spreaded_dir * 0.5 + glm.vec3(0, 0,
+                                                             -gun_offset) + side * gun_offset
+            r.end = m.pos + spreaded_dir * 300 + glm.vec3(0, 0, 0)
+
+            r.vel = spreaded_dir * 0.3
+            r.ttl = 30
+            self.rays.rays.append(r)
+            print('{}'.format(r.start))
+        # add spread, temp and decrease charges
+        g.spreadx += g.spreadx_per_shot
+        g.spready += g.spready_per_shot
+
+        g.offsetx += g.offsetx_per_shot
+        g.offsety += g.offsety_per_shot
+
+        g.charges -= 1.0
+        g.temperature += g.dt_per_shot
+        return True
+
+    def process_weapon(self, m):
+        if not m.gun:
+            return
+        assert  isinstance(m.gun, guns.Gun)
+        g = m.gun
+        '''
+    # state:
+    charges = 10.0
+    spread = 1.0
+    offsetx = 0.0
+    offsety = 0.0
+    temperature = 0.0
+    state_shot = 0  # no of frame when shooting initiated
+    state_reload = 0  # no of frame when reloading initiated
+'''
+        initiate_fire = False
+        if m.inputs.get(1):
+            if g.state_reload:
+                pass
+            elif g.state_shot:
+                if g.state_shot == g.auto_shot_time:
+                    initiate_fire = True
+            else:
+                initiate_fire = True
+
+        if initiate_fire:
+            g.state_shot = 1
+
+        # decay spread, temp
+        g.spreadx = g.spreadx * g.spread_decay + g.normal_spread * (1.0 - g.spread_decay)
+        g.spready = g.spready * g.spread_decay + g.normal_spread * (1.0 - g.spread_decay)
+
+        g.offsetx = g.offsetx * g.spread_decay
+        g.offsety = g.offsety * g.spread_decay
+
+        g.temperature *= g.temperature_decay
+
+        if g.state_shot == g.preshot_time:
+            if not self.fire_weapon(m, g):
+                g.state_shot = 0
+
+        elif g.state_shot >= g.shot_time:
+            g.state_shot = 0
+        if g.state_shot: g.state_shot += 1
+        if g.state_reload: g.state_reload += 1
+
     def process_monster(self, m):
         assert isinstance(m, Monster)
         mvel = 0.1
@@ -250,15 +445,20 @@ class Game:
         if m.inputs.get(pygame.K_c):
             m.pos.z -= mvel
 
-        zr = 0.5
+        for i in range(1,9):
+            if m.inputs.get(pygame.K_1 - 1 + i):
+                if i-1 < len(m.guns):
+                    m.gun = m.guns[i-1]
 
+        self.process_weapon(m)
+        zr = 0.5
         terrainz = max([self.terrain.getz(m.pos.x, m.pos.y),
                         self.terrain.getz(m.pos.x+zr, m.pos.y),
                         self.terrain.getz(m.pos.x-zr, m.pos.y),
                         self.terrain.getz(m.pos.x, m.pos.y+zr),
                         self.terrain.getz(m.pos.x, m.pos.y-zr)])
         #m.pos.z = terrainz + 1.7
-        print('{:.2f} {:.2f}'.format(terrainz, self.terrain.getz(m.pos.x, m.pos.y)))
+        #print('{:.2f} {:.2f}'.format(terrainz, self.terrain.getz(m.pos.x, m.pos.y)))
 
         if m.pos.z > terrainz + 1.7:
             # in air
@@ -352,7 +552,8 @@ class Game:
             glDrawArrays(GL_TRIANGLES, 0, self.vbo_planet.count)
             global DPF
             DPF += 1
-
+        self.rays.process()
+        self.rays.draw(self)
         #for t in self.towers:
         #    t.draw(self)
         glUseProgram(0)
@@ -394,12 +595,10 @@ class Shell:
         glEnable(GL_DEPTH_TEST)
         fps = self.clock.get_fps()
         global DPF
-        s = "FPS: {:.1f} * {} {} z:{:.2f} p{:.2f},{:.2f}".format(
+        s = "FPS: {:.1f} * {} {}".format(
             fps,
             self.overdraw,
-            DPF,
-            self.game.terrain.getz(self.game.player.pos.x, self.game.player.pos.y),
-            self.game.player.pos.x, self.game.player.pos.y
+            self.game.player.gun.str()
         )
         DPF = 0
 
