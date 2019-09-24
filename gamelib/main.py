@@ -26,6 +26,7 @@ from OpenGL.GL import shaders
 from .draw_text import *
 import time
 import glm
+DPF = 0
 
 
 def mat2list(m):
@@ -127,9 +128,9 @@ class Box:
                     game.player.pos + game.player.dir,
                     glm.vec3(0, 0, 1))
         mpos = glm.translate(mview,
-                             glm.vec3(0+self.xyscale*self.ix,
-                                      0+self.xyscale*self.iy,
-                                      100.0+tower.hceil*self.iz))
+                             glm.vec3(tower.pos.x+self.xyscale*self.ix,
+                                      tower.pos.y+self.xyscale*self.iy,
+                                      tower.pos.z+tower.hceil*self.iz))
         mscl = glm.scale(mpos, glm.vec3(self.xyscale, self.xyscale, self.zscale))
 
         #mfixbox1 = glm.translate(mscl, glm.vec3(1, 1, 0))
@@ -140,7 +141,8 @@ class Box:
             1, False,
             mat2list(mscl))
         glDrawArrays(GL_TRIANGLES, 0, game.cube_vbo_count)
-
+        global DPF
+        DPF += 1
 
 tower1 = '''
 --------
@@ -183,16 +185,17 @@ class Tower:
         self.w = 8
         self.h = 8
         self.hceil = 4.0
+        self.pos = glm.vec3(0,0,100)
         for c in range(3):
             for b, a in yxrange(self.h, self.w):
                 box = Box()
                 box.ix = a
                 box.iy = b
                 box.iz = c
-                if a in (0,7):
+                if b in (0,7):
                     box.zscale = self.hceil
                 else:
-                    box.zscale = 0.1 if 1 < b < 7 else 1
+                    box.zscale = 0.1 if 1 < a < 7 else 1
                 self.boxes.append(box)
 
     def draw(self, game):
@@ -212,13 +215,15 @@ class Game:
         self.fov = 90
         self.tgt_fov = 90
         self.aspect = 4.0/3.0
-        self.player.pos = glm.vec3(10,10,128)
+        self.player.pos = glm.vec3(300,80,108)
         self.planet_shader = shaders.compileProgram(
             shaders.compileShader(data.load_text('planet.vert'), GL_VERTEX_SHADER),
             shaders.compileShader(data.load_text('planet.frag'), GL_FRAGMENT_SHADER),
         )
         self.towers = []
-        self.towers.append(Tower())
+        t = Tower()
+        t.pos = glm.vec3(300, 80, 100)
+        self.towers.append(t)
         arr = []
         parr = [arr]
 
@@ -230,8 +235,8 @@ class Game:
             nhscale = 0.130
             tscale = 10.9
 
-            ii = (self.terrain_surface.get_height() - i) % self.terrain_surface.get_height()
-            jj = ( self.terrain_surface.get_width() - j) % self.terrain_surface.get_width()
+            ii = (i) % self.terrain_surface.get_height()
+            jj = (j) % self.terrain_surface.get_width()
             z = self.terrain_surface.get_at((jj, ii))[0]
 
             z += glm.simplex(glm.vec3(noffset + nscale * i, noffset + nscale * j, 09.23))*nhscale
@@ -402,6 +407,8 @@ class Game:
         with self.planet_vbo:
             glVertexAttribPointer(gal('in_vert'), 3, GL_FLOAT, False, 8*4, self.planet_vbo)
             glDrawArrays(GL_TRIANGLES, 0, self.planet_vbo_count)
+            global DPF
+            DPF += 1
 
         self.shell.texture.set(data.filepath('water.png'))
         glUniformMatrix4fv(
@@ -419,6 +426,8 @@ class Game:
         with self.planet_vbo:
             glVertexAttribPointer(gal('in_vert'), 3, GL_FLOAT, False, 8*4, self.planet_vbo)
             glDrawArrays(GL_TRIANGLES, 0, self.planet_vbo_count)
+            global DPF
+            DPF += 1
 
         for t in self.towers:
             t.draw(self)
@@ -434,7 +443,7 @@ class Shell:
         self.overdraw = 1
         pygame.init()
         pygame.display.init()
-        pygame.display.set_mode([1024, 768],
+        pygame.display.set_mode([1280, 1024],
                                 pygame.OPENGL | pygame.DOUBLEBUF | pygame.RESIZABLE)
         self.clock = pygame.time.Clock()
         self.text.init()
@@ -458,8 +467,11 @@ class Shell:
         #glEnable(GL_CULL_FACE)
         glEnable(GL_DEPTH_TEST)
         fps = self.clock.get_fps()
-        s = "FPS: {:.1f} * {}".format(fps, self.overdraw)
-        self.text.draw((650, 570), s, 30)
+        global DPF
+        s = "FPS: {:.1f} * {} {}".format(fps, self.overdraw, DPF)
+        DPF = 0
+
+        self.text.draw((10, 570), s, 30)
         self.crosshair.draw(0, data.filepath('crosshair.png'), 1/self.game.aspect)
 
         for i in range(self.overdraw):

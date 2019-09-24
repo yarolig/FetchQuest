@@ -14,7 +14,7 @@ from OpenGL.GL import *
 from OpenGL.GLU import *
 from OpenGL.GL import shaders
 #from OpenGL.arrays import vbo
-
+from . import  main
 
 
 class Texture:
@@ -110,6 +110,7 @@ class TextDrawer:
         glVertexAttribPointer(gal('in_tex'),  2, GL_FLOAT, False, 7*4, self.vertex_array_vbo+2*4)
         glVertexAttribPointer(gal('in_color'), 3, GL_FLOAT, False, 7*4, self.vertex_array_vbo+4*4)
         glDrawArrays(GL_TRIANGLES, 0, 6)
+        main.DPF +=1
         self.vertex_array_vbo.unbind()
         glUseProgram(0)
 
@@ -159,5 +160,7 @@ class CrosshairDrawer:
         glVertexAttribPointer(gal('in_tex'),  2, GL_FLOAT, False, 7*4, self.vertex_array_vbo+2*4)
         glVertexAttribPointer(gal('in_color'), 3, GL_FLOAT, False, 7*4, self.vertex_array_vbo+4*4)
         glDrawArrays(GL_TRIANGLES, 0, 6)
+        main.DPF += 1
+
         self.vertex_array_vbo.unbind()
         glUseProgram(0)
